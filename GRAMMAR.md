@@ -3,6 +3,8 @@
 The following grammar was made referencing the JSON specification diagrams
 available at: <https://www.json.org/json-en.html>.
 
+This grammar represents both the lexer and parser grammars.
+
 ```
 object: '{' pairs? '}'
 pairs?: pairs
@@ -49,18 +51,20 @@ escaped: '"'
 
 number: number_
       | '-' number_
-number_: number_integer number_fraction number_exponent
-number_integer: 0
-              | digit19 digits?
+number_: number_natural0 number_fraction number_exponent
+number_natural0: 0
+               | digit19 digits?
 number_fraction: '.' digits
+               | e
 number_exponent: exp_sym sign_sym digits
+               | e
 digits?: digits
        | e
 digits: digit digits?
 digit: [0..9]
 digit19: [1..9]
 exp_sym: 'e' | 'E'
-sign_sym: '+' | '-'
+sign_sym: e | '+' | '-'
 
 spaces?: space spaces?
        | e

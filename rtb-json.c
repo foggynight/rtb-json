@@ -1,6 +1,5 @@
 #include "rtb-json.h"
 
-#include <ctype.h> // TODO: TEMPORARY
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -9,10 +8,19 @@
 
 // utils -----------------------------------------------------------------------
 
+void print_error(char const *msg) {
+    printf("error: ");
+    printf("%s\n", msg);
+}
+
 // JSON specification doesn't include all characters identified as whitespace by
 // ctype isspace.
 bool char_is_space(char c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+bool char_is_digit(char c) {
+    return c >= '0' && c <= '9';
 }
 
 bool str_prefix(char const *str, char const *prefix) {
@@ -27,6 +35,7 @@ int str_prefix_len(char const *str, char const *prefix) {
     return 0;
 }
 
+// TODO: This also removes whitespace within tokens e.g. -12 3 = -123, fix this!
 // Remove whitespace from a string, except for that within double quotes.
 // NOTE: Modifies `str`, must not be a string literal.
 void remove_spaces_unquoted(char *src) {
@@ -46,6 +55,13 @@ int input_len;
 int input_i;
 
 char next(void) { return input_str[input_i]; }
+
+// Look ahead `i` characters after `next`.
+char lookahead(int i) {
+    if (input_i + i < input_len)
+        return input_str[input_i + i];
+    return '\0';
+}
 
 bool consume(void) {
     if (input_i < input_len) {
@@ -79,37 +95,70 @@ int next_bool(void) {
     return is_true ? is_true : str_prefix_len(input_str + input_i, "false");
 }
 
-// TODO
-bool parse_number(void) {
-    if (isdigit(next())) {
+bool next_number(void) {
+    char const c = next();
+    return c == '-' || char_is_digit(c);
+}
+
+bool parse_digits(void) {
+    bool digit_found = char_is_digit(next());
+    while (char_is_digit(next())) {
         consume();
-        return true;
     }
-    return false;
+    return digit_found;
 }
 
-// TODO
+bool parse_natural0(void) {
+    if (next() == '0') {
+        consume();
+        if (char_is_digit(next())) {
+            print_error("parse_natural0: digits follow leading zero");
+            return false;
+        }
+    } else if (char_is_digit(next())) {
+        if (!parse_digits()) return false;
+    }
+    return true;
+}
+
+bool parse_exponent(void) {
+    int sign = 1;
+    if (next() == '-') {
+        consume();
+        sign = -1;
+    } else if (next() == '+') {
+        consume();
+    }
+    return parse_digits();
+}
+
+bool parse_number(void) {
+    int sign = 1;
+    if (next() == '-') {
+        sign = -1;
+        consume();
+    }
+    if (!parse_natural0()) return false;
+    if (next() == '.') {
+        consume();
+        if (!parse_digits()) return false;
+    }
+    if (next() == 'e' || next() == 'E') {
+        consume();
+        if (!parse_exponent()) return false;
+    }
+    return true;
+}
+
 bool parse_string(void) {
-    return parse_number();
+    if (!expect('"')) return false;
+    while (next() != '"')
+        if (!consume()) return false;
+    if (!expect('"')) return false;
+    return true;
 }
 
-bool parse_value(void) {
-    int match_len;
-    if (next_null()) {
-        consume_n(sizeof("null")-1);
-        return true;
-    } else if (match_len = next_bool()) {
-        consume_n(match_len);
-        return true;
-    } else if (parse_number()) {
-        // TODO
-        return true;
-    } else if (parse_string()) {
-        // TODO
-        return true;
-    }
-    return false;
-}
+bool parse_value(void);
 
 bool parse_array(void) {
     if (!expect('[')) return false;
@@ -140,6 +189,24 @@ bool parse_object(void) {
     return true;
 }
 
+bool parse_value(void) {
+    int match_len;
+    if (next_null()) {
+        return consume_n(sizeof("null")-1);
+    } else if (match_len = next_bool()) {
+        return consume_n(match_len);
+    } else if (next_number()) {
+        return parse_number();
+    } else if (next() == '"') {
+        return parse_string();
+    } else if (next() == '[') {
+        return parse_array();
+    } else if (next() == '{') {
+        return parse_object();
+    }
+    return false;
+}
+
 bool json_parse(char *str) {
     // NOTE: Allocates enough memory to store original string, more than
     // necessary for the string with spaces removed, but saves a pass over
@@ -157,12 +224,10 @@ bool json_parse(char *str) {
     input_len = strlen(input_str);
     input_i = 0;
 
-    // TODO: Parse a value, not just object.
-    if (!parse_object()) return false;
+    if (!parse_value()) return false;
     if (!expect('\0')) return false;
 
     free(input_str);
-
     return true;
 }
 
@@ -171,12 +236,14 @@ bool json_parse(char *str) {
 #include <stdio.h>
 int main(void) {
     char *strs[] = {
-        "{}",
-        "{1 :	2,3 :4}",
-        "{1 :	2,3 :null}",
-        "{  1 :	true , 3 : null  }",
+        "1",
+        "{\"this\": 1}",
+        "[1, -2, -12.15e-015, \"this\", true, false, \" test\", null]",
+        "--12",
+        "++12",
+        "012",
+        "f",
     };
     for (size_t i = 0; i < sizeof(strs) / sizeof(*strs); ++i)
-        printf("%s\n", json_parse(strs[i]) ? "true" : "false");
-    printf("DONE\n");
+        printf("%s\n\n", json_parse(strs[i]) ? "true" : "false");
 }
