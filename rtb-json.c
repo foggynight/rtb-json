@@ -9,8 +9,8 @@
 // utils -----------------------------------------------------------------------
 
 void print_error(char const *msg) {
-    printf("error: ");
-    printf("%s\n", msg);
+    fprintf(stderr, "error: ");
+    fprintf(stderr, "%s\n", msg);
 }
 
 // JSON specification doesn't include all characters identified as whitespace by
@@ -37,9 +37,9 @@ int str_prefix_len(char const *str, char const *prefix) {
 
 // parser ----------------------------------------------------------------------
 
-char *input_str;
-int input_len;
-int input_i;
+static char *input_str;
+static int input_len;
+static int input_i;
 
 char next(void) { return input_str[input_i]; }
 
@@ -70,7 +70,8 @@ bool expect(char expected) {
         consume();
         return true;
     }
-    printf("error: expect: expected '%c', received '%c'\n", expected, next());
+    fprintf(stderr, "error: expect: expected '%c', received '%c'\n",
+            expected, next());
     return false;
 }
 
@@ -209,27 +210,15 @@ bool parse_value(void) {
     consume_whitespace();
 }
 
-bool json_parse(char *str) {
-    input_str = str;
+bool json_parse(const char *str) {
+    input_str = (char *)malloc((strlen(str) + 1) * sizeof(*str));
+    if (!input_str) {
+        print_error("json_parse: malloc failed to allocate input buffer");
+        return false;
+    }
     input_len = strlen(input_str);
     input_i = 0;
     if (!parse_value()) return false;
     if (!expect('\0')) return false;
     return true;
-}
-
-// main (test) -----------------------------------------------------------------
-
-#include <stdio.h>
-int main(void) {
-    char *strs[] = {
-        "1",
-        "{\"this\": 1}",
-        "[1, -2, -12.15e-015, \"this\", true, false, \" test\", null]",
-        "[  ]",
-        "{   }",
-        "1  23", // FALSE
-    };
-    for (size_t i = 0; i < sizeof(strs) / sizeof(*strs); ++i)
-        printf("%s\n", json_parse(strs[i]) ? "true" : "false");
 }
