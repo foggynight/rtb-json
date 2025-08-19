@@ -35,19 +35,6 @@ int str_prefix_len(char const *str, char const *prefix) {
     return 0;
 }
 
-// TODO: This also removes whitespace within tokens e.g. -12 3 = -123, fix this!
-// Remove whitespace from a string, except for that within double quotes.
-// NOTE: Modifies `str`, must not be a string literal.
-void remove_spaces_unquoted(char *src) {
-    bool in_string = false;
-    char *dst = src;
-    do {
-        while (!in_string && char_is_space(*src))
-            ++src;
-        if (*src == '"') in_string = !in_string;
-    } while (*(dst++) = *(src++));
-}
-
 // parser ----------------------------------------------------------------------
 
 char *input_str;
@@ -55,13 +42,6 @@ int input_len;
 int input_i;
 
 char next(void) { return input_str[input_i]; }
-
-// Look ahead `i` characters after `next`.
-char lookahead(int i) {
-    if (input_i + i < input_len)
-        return input_str[input_i + i];
-    return '\0';
-}
 
 bool consume(void) {
     if (input_i < input_len) {
@@ -75,6 +55,14 @@ bool consume_n(int n) {
         if (!consume())
             return false;
     return true;
+}
+int consume_whitespace(void) {
+    int count = 0;
+    while (char_is_space(next())) {
+        consume();
+        ++count;
+    }
+    return count;
 }
 
 bool expect(char expected) {
@@ -162,6 +150,11 @@ bool parse_value(void);
 
 bool parse_array(void) {
     if (!expect('[')) return false;
+    consume_whitespace();
+    if (next() == ']') {
+        consume();
+        return true;
+    }
     if (!parse_value()) return false;
     while (next() == ',') {
         consume();
@@ -172,7 +165,9 @@ bool parse_array(void) {
 }
 
 bool parse_pair(void) {
+    consume_whitespace();
     if (!parse_string()) return false;
+    consume_whitespace();
     if (!expect(':')) return false;
     if (!parse_value()) return false;
     return true;
@@ -180,6 +175,11 @@ bool parse_pair(void) {
 
 bool parse_object(void) {
     if (!expect('{')) return false;
+    consume_whitespace();
+    if (next() == '}') {
+        consume();
+        return true;
+    }
     parse_pair();
     while (next() == ',') {
         consume();
@@ -190,6 +190,7 @@ bool parse_object(void) {
 }
 
 bool parse_value(void) {
+    consume_whitespace();
     int match_len;
     if (next_null()) {
         return consume_n(sizeof("null")-1);
@@ -205,29 +206,15 @@ bool parse_value(void) {
         return parse_object();
     }
     return false;
+    consume_whitespace();
 }
 
 bool json_parse(char *str) {
-    // NOTE: Allocates enough memory to store original string, more than
-    // necessary for the string with spaces removed, but saves a pass over
-    // string spent determining new memory size.
-    input_str = malloc((strlen(str) + 1) * sizeof(*str));
-    if (!input_str) {
-        printf("json_parse: malloc failed\n");
-        return false;
-    }
-    strcpy(input_str, str);
-    remove_spaces_unquoted(input_str);
-    printf("original:  %s\n", str);
-    printf("no spaces: %s\n", input_str);
-
+    input_str = str;
     input_len = strlen(input_str);
     input_i = 0;
-
     if (!parse_value()) return false;
     if (!expect('\0')) return false;
-
-    free(input_str);
     return true;
 }
 
@@ -239,11 +226,10 @@ int main(void) {
         "1",
         "{\"this\": 1}",
         "[1, -2, -12.15e-015, \"this\", true, false, \" test\", null]",
-        "--12",
-        "++12",
-        "012",
-        "f",
+        "[  ]",
+        "{   }",
+        "1  23", // FALSE
     };
     for (size_t i = 0; i < sizeof(strs) / sizeof(*strs); ++i)
-        printf("%s\n\n", json_parse(strs[i]) ? "true" : "false");
+        printf("%s\n", json_parse(strs[i]) ? "true" : "false");
 }
