@@ -20,7 +20,7 @@ bool char_is_space(char c) {
 }
 
 bool char_is_digit(char c) {
-    return c >= '0' && c <= '9';
+    return '0' <= c && c <= '9';
 }
 
 bool str_prefix(char const *str, char const *prefix) {
@@ -104,10 +104,9 @@ bool parse_natural0(void) {
             print_error("parse_natural0: digits follow leading zero");
             return false;
         }
-    } else if (char_is_digit(next())) {
-        if (!parse_digits()) return false;
+        return true;
     }
-    return true;
+    return parse_digits();
 }
 
 bool parse_exponent(void) {
@@ -139,6 +138,7 @@ bool parse_number(void) {
     return true;
 }
 
+// TODO: Add string escape '\'.
 bool parse_string(void) {
     if (!expect('"')) return false;
     while (next() != '"')
@@ -192,22 +192,23 @@ bool parse_object(void) {
 
 bool parse_value(void) {
     consume_whitespace();
+    bool status = false;
     int match_len;
     if (next_null()) {
-        return consume_n(sizeof("null")-1);
+        status = consume_n(sizeof("null")-1);
     } else if (match_len = next_bool()) {
-        return consume_n(match_len);
+        status = consume_n(match_len);
     } else if (next_number()) {
-        return parse_number();
+        status = parse_number();
     } else if (next() == '"') {
-        return parse_string();
+        status = parse_string();
     } else if (next() == '[') {
-        return parse_array();
+        status = parse_array();
     } else if (next() == '{') {
-        return parse_object();
+        status = parse_object();
     }
-    return false;
     consume_whitespace();
+    return status;
 }
 
 bool json_parse(const char *str) {
@@ -216,9 +217,18 @@ bool json_parse(const char *str) {
         print_error("json_parse: malloc failed to allocate input buffer");
         return false;
     }
+    strcpy(input_str, str);
     input_len = strlen(input_str);
     input_i = 0;
     if (!parse_value()) return false;
     if (!expect('\0')) return false;
     return true;
 }
+
+/*
+int main(void) {
+    char const *json = "";
+    printf("%d\n", json_parse(json));
+    return 0;
+}
+*/
