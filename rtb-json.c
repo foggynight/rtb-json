@@ -40,6 +40,17 @@ typedef struct CBuf {
     size_t capacity;
 } CBuf;
 
+// NOTE: Must still call `free` on caller `buf` if heap allocated.
+void cbuf_destroy(CBuf *buf) {
+    if (buf->items) free(buf->items);
+    buf->items = NULL;
+    buf->size = buf->capacity = 0;
+}
+
+void cbuf_clear(CBuf *buf) {
+    buf->size = 0;
+}
+
 bool cbuf_append(CBuf *buf, char c) {
     if (buf->size >= buf->capacity) {
         buf->capacity = (buf->capacity == 0) ? 64 : buf->capacity * 2;
@@ -60,10 +71,6 @@ bool cbuf_appendstr(CBuf *buf, char const *str) {
         ++str;
     }
     return true;
-}
-
-void cbuf_clear(CBuf *buf) {
-    buf->size = 0;
 }
 
 bool cbuf_reserve(CBuf *buf, size_t capacity) {
@@ -90,32 +97,26 @@ char *cbuf_str(CBuf const *buf) {
 
 // JSONDocument ----------------------------------------------------------------
 
-typedef enum {
-    JSONNull,
-    JSONBool,
-    JSONNumber,
-    JSONString,
-    JSONArray,
-    JSONPair,
-    JSONObject,
-} JSONType;
-
-typedef struct JSONDocument {
-    JSONType type;
-    struct JSONDocument *parent;
-    struct JSONDocument *children;    // Head of linked list of children.
-    struct JSONDocument *prev, *next; // Prev and next sibling in parent's
-                                      // children list.
-    union {
-        bool boolval;
-        char *string;
-        struct {
-            char *number_integer;
-            char *number_fraction;
-            char *number_exponent;
-        };
-    };
-} JSONDocument;
+// NOTE: Must still call `free` on caller `doc` if heap allocated.
+void jsondoc_destroy(JSONDocument *doc) {
+    switch (doc->type) {
+    case JSONString:
+        if (doc->string != NULL) free(doc->string);
+        break;
+    case JSONNumber:
+        if (doc->number_integer != NULL) free(doc->number_integer);
+        if (doc->number_fraction != NULL) free(doc->number_fraction);
+        if (doc->number_exponent != NULL) free(doc->number_exponent);
+        break;
+    }
+    JSONDocument *walk = doc->children;
+    while (walk != NULL) {
+        jsondoc_destroy(walk);
+        JSONDocument *next = walk->next;
+        free(walk);
+        walk = next;
+    }
+}
 
 void jsondoc_addchild(JSONDocument *parent, JSONDocument *child) {
     child->parent = parent;
@@ -209,7 +210,7 @@ char *jsondoc_str(JSONDocument *doc) {
 // TODO: Add more error messages signaling input errors.
 
 // Copy of input string to work with during parsing.
-static char *input_str;
+static char const *input_str;
 static int input_len;
 static int input_i;
 
@@ -467,16 +468,11 @@ fail:
 }
 
 JSONDocument *json_parse(const char *str) {
-    input_str = malloc((strlen(str) + 1));
-    if (!input_str) {
-        print_error("json_parse: malloc failed to allocate input buffer");
-        return false;
-    }
-    strcpy(input_str, str);
+    input_str = str;
     input_len = strlen(input_str);
     input_i = 0;
-
     JSONDocument *doc = parse_value();
+    cbuf_destroy(&parse_buf);
     if (!doc || !expect('\0')) return NULL;
     return doc;
 }
@@ -496,7 +492,7 @@ int main(void) {
         //"false",
         //"[null, true, false]",
         //"[null, true, false, 0, -1.0e2, \"test\"]",
-        "{\"a\": null, \"b\": 0, \"c\": [1.0,2e0,3]}",
+        "{\"a\": null, \"b\": 0, \"c\": [1,-2.0e0,3.0]}",
     };
     size_t len = sizeof(strs) / sizeof(*strs);
     for (size_t i = 0; i < len; ++i) {
@@ -505,8 +501,12 @@ int main(void) {
         if (!doc) {
             print_error("json_parse: failed to parse JSON");
         } else {
+            char *str = jsondoc_str(doc);
             printf("TYPE = %d: ", doc->type);
-            printf("%s -> %s\n", json, jsondoc_str(doc));
+            printf("%s -> %s\n", json, str);
+            free(str);
+            jsondoc_destroy(doc);
+            free(doc);
         }
     }
     return 0;
