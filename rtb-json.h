@@ -8,7 +8,7 @@ extern "C" {
 
 #include <stdbool.h>
 
-bool json_parse(const char *str);
+//bool json_parse(const char *str);
 
 #ifdef __cplusplus
 }
