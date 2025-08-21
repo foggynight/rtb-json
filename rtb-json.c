@@ -1,3 +1,7 @@
+// rtb-json - JSON Parser
+// Copyright (C) 2025 Robert Coffey
+// Released under the MIT license.
+
 #include "rtb-json.h"
 
 #include <stdbool.h>
@@ -41,7 +45,7 @@ typedef struct CBuf {
 } CBuf;
 
 // NOTE: Must still call `free` on caller `buf` if heap allocated.
-void cbuf_destroy(CBuf *buf) {
+void cbuf_delete(CBuf *buf) {
     if (buf->items) free(buf->items);
     buf->items = NULL;
     buf->size = buf->capacity = 0;
@@ -64,7 +68,7 @@ bool cbuf_append(CBuf *buf, char c) {
     return true;
 }
 
-bool cbuf_appendstr(CBuf *buf, char const *str) {
+bool cbuf_append_str(CBuf *buf, char const *str) {
     while (*str != '\0') {
         if (!cbuf_append(buf, *str))
             return false;
@@ -84,10 +88,10 @@ bool cbuf_reserve(CBuf *buf, size_t capacity) {
     return true;
 }
 
-char *cbuf_str(CBuf const *buf) {
+char *cbuf_print(CBuf const *buf) {
     char *str = malloc(buf->size + 1);
     if (!str) {
-        print_error("cbuf_str: allocation failed");
+        print_error("cbuf_print: allocation failed");
         return NULL;
     }
     strncpy(str, buf->items, buf->size);
@@ -95,36 +99,36 @@ char *cbuf_str(CBuf const *buf) {
     return str;
 }
 
-// JSONDocument ----------------------------------------------------------------
+// JSON ------------------------------------------------------------------------
 
-// NOTE: Must still call `free` on caller `doc` if heap allocated.
-void jsondoc_destroy(JSONDocument *doc) {
-    switch (doc->type) {
+// NOTE: Must still call `free` on caller `json` if heap allocated.
+void json_delete(JSON *json) {
+    switch (json->type) {
     case JSONString:
-        if (doc->string != NULL) free(doc->string);
+        if (json->string != NULL) free(json->string);
         break;
     case JSONNumber:
-        if (doc->number_integer != NULL) free(doc->number_integer);
-        if (doc->number_fraction != NULL) free(doc->number_fraction);
-        if (doc->number_exponent != NULL) free(doc->number_exponent);
+        if (json->number_integer != NULL) free(json->number_integer);
+        if (json->number_fraction != NULL) free(json->number_fraction);
+        if (json->number_exponent != NULL) free(json->number_exponent);
         break;
     }
-    JSONDocument *walk = doc->children;
+    JSON *walk = json->child;
     while (walk != NULL) {
-        jsondoc_destroy(walk);
-        JSONDocument *next = walk->next;
+        json_delete(walk);
+        JSON *next = walk->next;
         free(walk);
         walk = next;
     }
 }
 
-void jsondoc_addchild(JSONDocument *parent, JSONDocument *child) {
+void json_addchild(JSON *parent, JSON *child) {
     child->parent = parent;
-    if (parent->children == NULL) {
-        parent->children = child;
+    if (parent->child == NULL) {
+        parent->child = child;
         child->prev = child->next = NULL;
     } else {
-        JSONDocument *walk = parent->children;
+        JSON *walk = parent->child;
         while (walk->next != NULL) walk = walk->next;
         walk->next = child;
         child->prev = walk;
@@ -132,37 +136,37 @@ void jsondoc_addchild(JSONDocument *parent, JSONDocument *child) {
     }
 }
 
-bool jsondoc_str_(JSONDocument *doc, CBuf *buf) {
-    JSONDocument *child = NULL;
-    switch (doc->type) {
+bool json_print_(JSON *json, CBuf *buf) {
+    JSON *child = NULL;
+    switch (json->type) {
     case JSONNull:
-        if (!cbuf_appendstr(buf, "null")) return false;
+        if (!cbuf_append_str(buf, "null")) return false;
         break;
     case JSONBool:
-        if (!cbuf_appendstr(buf, doc->boolval ? "true" : "false"))
+        if (!cbuf_append_str(buf, json->boolval ? "true" : "false"))
             return false;
         break;
     case JSONNumber:
-        if (!cbuf_appendstr(buf, doc->number_integer)) return false;
-        if (*(doc->number_fraction) != '\0') {
+        if (!cbuf_append_str(buf, json->number_integer)) return false;
+        if (*(json->number_fraction) != '\0') {
             if (!cbuf_append(buf, '.')) return false;
-            if (!cbuf_appendstr(buf, doc->number_fraction)) return false;
+            if (!cbuf_append_str(buf, json->number_fraction)) return false;
         }
-        if (*(doc->number_exponent) != '\0') {
+        if (*(json->number_exponent) != '\0') {
             if (!cbuf_append(buf, 'e')) return false;
-            if (!cbuf_appendstr(buf, doc->number_exponent)) return false;
+            if (!cbuf_append_str(buf, json->number_exponent)) return false;
         }
         break;
     case JSONString:
         cbuf_append(buf, '"');
-        cbuf_appendstr(buf, doc->string);
+        cbuf_append_str(buf, json->string);
         cbuf_append(buf, '"');
         break;
     case JSONArray:
         cbuf_append(buf, '[');
-        child = doc->children;
+        child = json->child;
         while (child != NULL) {
-            jsondoc_str_(child, buf);
+            json_print_(child, buf);
             child = child->next;
             if (child != NULL)
                 cbuf_append(buf, ',');
@@ -170,15 +174,15 @@ bool jsondoc_str_(JSONDocument *doc, CBuf *buf) {
         cbuf_append(buf, ']');
         break;
     case JSONPair:
-        jsondoc_str_(doc->children, buf);
+        json_print_(json->child, buf);
         cbuf_append(buf, ':');
-        jsondoc_str_(doc->children->next, buf);
+        json_print_(json->child->next, buf);
         break;
     case JSONObject:
         cbuf_append(buf, '{');
-        child = doc->children;
+        child = json->child;
         while (child != NULL) {
-            jsondoc_str_(child, buf);
+            json_print_(child, buf);
             child = child->next;
             if (child != NULL)
                 cbuf_append(buf, ',');
@@ -189,13 +193,13 @@ bool jsondoc_str_(JSONDocument *doc, CBuf *buf) {
     return true;
 }
 
-char *jsondoc_str(JSONDocument *doc) {
+char *json_print(JSON *json) {
     static CBuf buf = {0};
     cbuf_clear(&buf);
-    if (!jsondoc_str_(doc, &buf)) return NULL;
+    if (!json_print_(json, &buf)) return NULL;
     char *str = malloc(buf.size * sizeof(char));
     if (!str) {
-        print_error("jsondoc_str: failed to allocate string");
+        print_error("json_str: failed to allocate string");
         return NULL;
     }
     strncpy(str, buf.items, buf.size);
@@ -205,7 +209,7 @@ char *jsondoc_str(JSONDocument *doc) {
 // parser ----------------------------------------------------------------------
 //
 // TODO: Explain how parser works and difference between functions which take
-// CBuf or JSONDocument as input, and return bool or JSONDocument as output.
+// CBuf or JSON as input, and return bool or JSON as output.
 //
 // TODO: Add more error messages signaling input errors.
 
@@ -263,9 +267,9 @@ bool expect_str(char const *str) {
     return true;
 }
 
-bool parse_null(JSONDocument *doc) {
+bool parse_null(JSON *json) {
     if (!expect_str("null")) return false;
-    doc->type = JSONNull;
+    json->type = JSONNull;
     return true;
 }
 
@@ -274,15 +278,15 @@ int next_bool(void) {
     else if (next() == 'f') return 5; // strlen("false")
     else                    return 0;
 }
-bool parse_bool(JSONDocument *doc, int len) {
+bool parse_bool(JSON *json, int len) {
     if (len == 4) {
         expect_str("true");
-        doc->boolval = true;
+        json->boolval = true;
     } else if (len == 5) {
         expect_str("false");
-        doc->boolval = false;
+        json->boolval = false;
     } else return false;
-    doc->type = JSONBool;
+    json->type = JSONBool;
     return true;
 }
 
@@ -323,7 +327,7 @@ bool parse_exponent(CBuf *buf) {
     return parse_digits(buf);
 }
 
-bool parse_number(JSONDocument *doc) {
+bool parse_number(JSON *json) {
     // Parse integer part of number.
     cbuf_clear(&parse_buf);
     if (next() == '-') {
@@ -331,7 +335,7 @@ bool parse_number(JSONDocument *doc) {
         cbuf_append(&parse_buf, '-');
     }
     if (!parse_natural0(&parse_buf)) return false;
-    doc->number_integer = cbuf_str(&parse_buf);
+    json->number_integer = cbuf_print(&parse_buf);
 
     // Parse fraction part of number.
     cbuf_clear(&parse_buf);
@@ -339,7 +343,7 @@ bool parse_number(JSONDocument *doc) {
         consume();
         if (!parse_digits(&parse_buf)) return false;
     }
-    doc->number_fraction = cbuf_str(&parse_buf);
+    json->number_fraction = cbuf_print(&parse_buf);
 
     // Parse fraction part of number.
     cbuf_clear(&parse_buf);
@@ -347,14 +351,14 @@ bool parse_number(JSONDocument *doc) {
         consume();
         if (!parse_exponent(&parse_buf)) return false;
     }
-    doc->number_exponent = cbuf_str(&parse_buf);
+    json->number_exponent = cbuf_print(&parse_buf);
 
-    doc->type = JSONNumber;
+    json->type = JSONNumber;
     return true;
 }
 
 // TODO: Add string escape '\'.
-bool parse_string(JSONDocument *doc) {
+bool parse_string(JSON *json) {
     cbuf_clear(&parse_buf);
     if (!expect('"')) return false;
     while (next() != '"') {
@@ -362,14 +366,14 @@ bool parse_string(JSONDocument *doc) {
         if (!consume()) return false;
     }
     if (!expect('"')) return false;
-    doc->string = cbuf_str(&parse_buf);
-    doc->type = JSONString;
+    json->string = cbuf_print(&parse_buf);
+    json->type = JSONString;
     return true;
 }
 
-JSONDocument *parse_value(void);
+JSON *parse_value(void);
 
-bool parse_array(JSONDocument *doc) {
+bool parse_array(JSON *json) {
     if (!expect('[')) return false;
     consume_whitespace();
     if (next() == ']') {
@@ -377,38 +381,38 @@ bool parse_array(JSONDocument *doc) {
         goto done;
     }
     while (true) {
-        JSONDocument *child = parse_value();
+        JSON *child = parse_value();
         if (!child) return false;
-        jsondoc_addchild(doc, child);
+        json_addchild(json, child);
         if (next() != ',')
             break;
         consume();
     }
     if (!expect(']')) return false;
 done:
-    doc->type = JSONArray;
+    json->type = JSONArray;
     return true;
 }
 
-JSONDocument *parse_pair(void) {
-    JSONDocument *pair = calloc(1, sizeof(JSONDocument));
+JSON *parse_pair(void) {
+    JSON *pair = calloc(1, sizeof(JSON));
     if (!pair) {
-        print_error("parse_pair: failed to allocate JSONDocument");
+        print_error("parse_pair: failed to allocate JSON");
         return NULL;
     }
-    JSONDocument *key = calloc(1, sizeof(JSONDocument));
+    JSON *key = calloc(1, sizeof(JSON));
     if (!key) {
-        print_error("parse_pair: failed to allocate JSONDocument");
+        print_error("parse_pair: failed to allocate JSON");
         return NULL;
     }
-    JSONDocument *val; // set by `parse_value`
+    JSON *val; // set by `parse_value`
     consume_whitespace();
     if (!parse_string(key)) goto fail;
     consume_whitespace();
     if (!expect(':')) goto fail;
     if (!(val = parse_value())) goto fail;
-    jsondoc_addchild(pair, key);
-    jsondoc_addchild(pair, val);
+    json_addchild(pair, key);
+    json_addchild(pair, val);
     pair->type = JSONPair;
     return pair;
 fail:
@@ -416,7 +420,7 @@ fail:
     return NULL;
 }
 
-bool parse_object(JSONDocument *doc) {
+bool parse_object(JSON *json) {
     if (!expect('{')) return false;
     consume_whitespace();
     if (next() == '}') {
@@ -424,57 +428,57 @@ bool parse_object(JSONDocument *doc) {
         goto done;
     }
     while (true) {
-        JSONDocument *pair = parse_pair();
+        JSON *pair = parse_pair();
         if (!pair) return false;
-        jsondoc_addchild(doc, pair);
+        json_addchild(json, pair);
         if (next() != ',')
             break;
         consume();
     }
     if (!expect('}')) return false;
 done:
-    doc->type = JSONObject;
+    json->type = JSONObject;
     return true;
 }
 
-JSONDocument *parse_value(void) {
-    JSONDocument *doc = calloc(1, sizeof(JSONDocument));
-    if (!doc) {
-        print_error("parse_value: failed to allocate JSONDocument");
+JSON *parse_value(void) {
+    JSON *json = calloc(1, sizeof(JSON));
+    if (!json) {
+        print_error("parse_value: failed to allocate JSON");
         return NULL;
     }
     consume_whitespace();
     int match_len;
     if (next() == 'n') {
-        if (!parse_null(doc)) goto fail;
+        if (!parse_null(json)) goto fail;
     } else if (match_len = next_bool()) {
-        if (!parse_bool(doc, match_len)) goto fail;
+        if (!parse_bool(json, match_len)) goto fail;
     } else if (next_number()) {
-        if (!parse_number(doc)) goto fail;
+        if (!parse_number(json)) goto fail;
     } else if (next() == '"') {
-        if (!parse_string(doc)) goto fail;
+        if (!parse_string(json)) goto fail;
     } else if (next() == '[') {
-        if (!parse_array(doc)) goto fail;
+        if (!parse_array(json)) goto fail;
     } else if (next() == '{') {
-        if (!parse_object(doc)) goto fail;
+        if (!parse_object(json)) goto fail;
     } else {
         goto fail;
     }
     consume_whitespace();
-    return doc;
+    return json;
 fail:
-    free(doc);
+    free(json);
     return NULL;
 }
 
-JSONDocument *json_parse(const char *str) {
+JSON *json_parse(const char *str) {
     input_str = str;
     input_len = strlen(input_str);
     input_i = 0;
-    JSONDocument *doc = parse_value();
-    cbuf_destroy(&parse_buf);
-    if (!doc || !expect('\0')) return NULL;
-    return doc;
+    JSON *json = parse_value();
+    cbuf_delete(&parse_buf);
+    if (!json || !expect('\0')) return NULL;
+    return json;
 }
 
 // main (test) -----------------------------------------------------------------
@@ -496,17 +500,17 @@ int main(void) {
     };
     size_t len = sizeof(strs) / sizeof(*strs);
     for (size_t i = 0; i < len; ++i) {
-        char const *json = strs[i];
-        JSONDocument *doc = json_parse(json);
-        if (!doc) {
+        char const *json_str = strs[i];
+        JSON *json = json_parse(json_str);
+        if (!json) {
             print_error("json_parse: failed to parse JSON");
         } else {
-            char *str = jsondoc_str(doc);
-            printf("TYPE = %d: ", doc->type);
-            printf("%s -> %s\n", json, str);
+            char *str = json_print(json);
+            printf("TYPE = %d: ", json->type);
+            printf("%s -> %s\n", json_str, str);
             free(str);
-            jsondoc_destroy(doc);
-            free(doc);
+            json_delete(json);
+            free(json);
         }
     }
     return 0;

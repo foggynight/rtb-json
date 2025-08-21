@@ -18,12 +18,11 @@ typedef enum {
     JSONObject,
 } JSONType;
 
-typedef struct JSONDocument {
+typedef struct JSON {
     JSONType type;
-    struct JSONDocument *parent;
-    struct JSONDocument *children;    // Head of linked list of children.
-    struct JSONDocument *prev, *next; // Prev and next sibling in parent's
-                                      // children list.
+    struct JSON *parent;
+    struct JSON *child;       // Head of linked list of children.
+    struct JSON *prev, *next; // Prev and next sibling in parent's child list.
     union {
         bool boolval;
         char *string;
@@ -33,11 +32,10 @@ typedef struct JSONDocument {
             char *number_exponent;
         };
     };
-} JSONDocument;
+} JSON;
 
-void jsondoc_destroy(JSONDocument *doc);
-
-JSONDocument *json_parse(const char *str);
+JSON *json_parse(const char *str);
+void json_delete(JSON *json);
 
 #ifdef __cplusplus
 }
