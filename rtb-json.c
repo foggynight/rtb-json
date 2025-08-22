@@ -102,7 +102,7 @@ char *cbuf_print(CBuf const *buf) {
 // JSON ------------------------------------------------------------------------
 
 // NOTE: Must still call `free` on caller `json` if heap allocated.
-void json_delete(JSON *json) {
+void JSON_Delete(JSON *json) {
     switch (json->type) {
     case JSONString:
         if (json->string != NULL) free(json->string);
@@ -115,14 +115,14 @@ void json_delete(JSON *json) {
     }
     JSON *walk = json->child;
     while (walk != NULL) {
-        json_delete(walk);
+        JSON_Delete(walk);
         JSON *next = walk->next;
         free(walk);
         walk = next;
     }
 }
 
-void json_addchild(JSON *parent, JSON *child) {
+void JSON_AddChild(JSON *parent, JSON *child) {
     child->parent = parent;
     if (parent->child == NULL) {
         parent->child = child;
@@ -136,7 +136,7 @@ void json_addchild(JSON *parent, JSON *child) {
     }
 }
 
-bool json_print_(JSON *json, CBuf *buf) {
+bool JSON_Print_(JSON *json, CBuf *buf) {
     JSON *child = NULL;
     switch (json->type) {
     case JSONNull:
@@ -166,7 +166,7 @@ bool json_print_(JSON *json, CBuf *buf) {
         cbuf_append(buf, '[');
         child = json->child;
         while (child != NULL) {
-            json_print_(child, buf);
+            JSON_Print_(child, buf);
             child = child->next;
             if (child != NULL)
                 cbuf_append(buf, ',');
@@ -174,15 +174,15 @@ bool json_print_(JSON *json, CBuf *buf) {
         cbuf_append(buf, ']');
         break;
     case JSONPair:
-        json_print_(json->child, buf);
+        JSON_Print_(json->child, buf);
         cbuf_append(buf, ':');
-        json_print_(json->child->next, buf);
+        JSON_Print_(json->child->next, buf);
         break;
     case JSONObject:
         cbuf_append(buf, '{');
         child = json->child;
         while (child != NULL) {
-            json_print_(child, buf);
+            JSON_Print_(child, buf);
             child = child->next;
             if (child != NULL)
                 cbuf_append(buf, ',');
@@ -193,10 +193,10 @@ bool json_print_(JSON *json, CBuf *buf) {
     return true;
 }
 
-char *json_print(JSON *json) {
+char *JSON_Print(JSON *json) {
     static CBuf buf = {0};
     cbuf_clear(&buf);
-    if (!json_print_(json, &buf)) return NULL;
+    if (!JSON_Print_(json, &buf)) return NULL;
     char *str = malloc(buf.size * sizeof(char));
     if (!str) {
         print_error("json_str: failed to allocate string");
@@ -383,7 +383,7 @@ bool parse_array(JSON *json) {
     while (true) {
         JSON *child = parse_value();
         if (!child) return false;
-        json_addchild(json, child);
+        JSON_AddChild(json, child);
         if (next() != ',')
             break;
         consume();
@@ -411,8 +411,8 @@ JSON *parse_pair(void) {
     consume_whitespace();
     if (!expect(':')) goto fail;
     if (!(val = parse_value())) goto fail;
-    json_addchild(pair, key);
-    json_addchild(pair, val);
+    JSON_AddChild(pair, key);
+    JSON_AddChild(pair, val);
     pair->type = JSONPair;
     return pair;
 fail:
@@ -430,7 +430,7 @@ bool parse_object(JSON *json) {
     while (true) {
         JSON *pair = parse_pair();
         if (!pair) return false;
-        json_addchild(json, pair);
+        JSON_AddChild(json, pair);
         if (next() != ',')
             break;
         consume();
@@ -471,7 +471,7 @@ fail:
     return NULL;
 }
 
-JSON *json_parse(const char *str) {
+JSON *JSON_Parse(const char *str) {
     input_str = str;
     input_len = strlen(input_str);
     input_i = 0;
@@ -501,15 +501,15 @@ int main(void) {
     size_t len = sizeof(strs) / sizeof(*strs);
     for (size_t i = 0; i < len; ++i) {
         char const *json_str = strs[i];
-        JSON *json = json_parse(json_str);
+        JSON *json = JSON_Parse(json_str);
         if (!json) {
-            print_error("json_parse: failed to parse JSON");
+            print_error("JSON_Parse: failed to parse JSON");
         } else {
-            char *str = json_print(json);
+            char *str = JSON_Print(json);
             printf("TYPE = %d: ", json->type);
             printf("%s -> %s\n", json_str, str);
             free(str);
-            json_delete(json);
+            JSON_Delete(json);
             free(json);
         }
     }
