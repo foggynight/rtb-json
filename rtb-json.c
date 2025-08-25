@@ -44,27 +44,40 @@ typedef struct CBuf {
     size_t capacity;
 } CBuf;
 
-// NOTE: Must still call `free` on caller `buf` if heap allocated.
-void cbuf_delete(CBuf *buf) {
-    if (buf->items) free(buf->items);
-    buf->items = NULL;
-    buf->size = buf->capacity = 0;
-}
-
 void cbuf_clear(CBuf *buf) {
     buf->size = 0;
 }
 
-bool cbuf_append(CBuf *buf, char c) {
-    if (buf->size >= buf->capacity) {
-        buf->capacity = (buf->capacity == 0) ? 64 : buf->capacity * 2;
-        buf->items = realloc(buf->items, buf->capacity * sizeof(*(buf->items)));
-        if (!buf->items) {
-            print_error("cbuf_append: reallocation failed");
-            return false;
-        }
+int cbuf_remaining(CBuf const * buf) {
+    return buf->capacity - buf->size;
+}
+
+bool cbuf_reserve(CBuf *buf, size_t capacity) {
+    buf->capacity = capacity;
+    char *items = realloc(buf->items, capacity * sizeof(*(buf->items)));
+    if (!items) {
+        print_error("cbuf_reserve: reallocation failed");
+        return false;
     }
+    buf->items = items;
+    return true;
+}
+
+bool cbuf_grow(CBuf *buf) {
+    buf->capacity = (buf->capacity == 0) ? 64 : buf->capacity * 2;
+    buf->items = realloc(buf->items, buf->capacity * sizeof(*(buf->items)));
+    if (!buf->items) {
+        print_error("cbuf_grow: reallocation failed");
+        return false;
+    }
+    return true;
+}
+
+bool cbuf_append(CBuf *buf, char c) {
+    if (buf->size+1 >= buf->capacity)
+        cbuf_grow(buf);
     buf->items[buf->size++] = c;
+    buf->items[buf->size] = '\0';
     return true;
 }
 
@@ -77,17 +90,6 @@ bool cbuf_append_str(CBuf *buf, char const *str) {
     return true;
 }
 
-bool cbuf_reserve(CBuf *buf, size_t capacity) {
-    char *items = realloc(buf->items, capacity * sizeof(*(buf->items)));
-    if (!items) {
-        print_error("cbuf_reserve: reallocation failed");
-        return false;
-    }
-    buf->items = items;
-    buf->capacity = capacity;
-    return true;
-}
-
 char *cbuf_print(CBuf const *buf) {
     char *str = malloc(buf->size + 1);
     if (!str) {
@@ -97,6 +99,13 @@ char *cbuf_print(CBuf const *buf) {
     strncpy(str, buf->items, buf->size);
     str[buf->size] = '\0';
     return str;
+}
+
+// NOTE: Must still call `free` on caller `buf` if heap allocated.
+void cbuf_delete(CBuf *buf) {
+    if (buf->items) free(buf->items);
+    buf->items = NULL;
+    buf->size = buf->capacity = 0;
 }
 
 // JSON ------------------------------------------------------------------------
@@ -119,8 +128,7 @@ JSON *JSON_CreateBool(bool const val) {
 
 JSON *JSON_CreateNumber(double const num) {
     JSON *json = JSON_Create(JSONNumber);
-    // TODO: NUMBER VALUE
-    // if (json) json->boolval = val;
+    if (json) json->number = num;
     return json;
 }
 
@@ -188,15 +196,15 @@ bool JSON_Print_(JSON const * const json, CBuf * const buf) {
             return false;
         break;
     case JSONNumber:
-        if (!cbuf_append_str(buf, json->number_integer)) return false;
-        if (*(json->number_fraction) != '\0') {
-            if (!cbuf_append(buf, '.')) return false;
-            if (!cbuf_append_str(buf, json->number_fraction)) return false;
-        }
-        if (*(json->number_exponent) != '\0') {
-            if (!cbuf_append(buf, 'e')) return false;
-            if (!cbuf_append_str(buf, json->number_exponent)) return false;
-        }
+        char const *fmt = "%lg";
+        int number_len = snprintf(NULL, 0, fmt, json->number);
+        if (number_len < 0) return false;
+        while (number_len + 1 > cbuf_remaining(buf)) cbuf_grow(buf);
+        if (snprintf(buf->items + buf->size, number_len + 1,
+                    fmt, json->number)
+                < 1)
+            return false;
+        buf->size += number_len;
         break;
     case JSONString:
         cbuf_append(buf, '"');
@@ -244,6 +252,7 @@ char *JSON_Print(JSON const * const json) {
         return NULL;
     }
     strncpy(str, buf.items, buf.size);
+    cbuf_delete(&buf);
     return str;
 }
 
@@ -251,11 +260,6 @@ void JSON_Delete(JSON *json) {
     switch (json->type) {
     case JSONString:
         if (json->string != NULL) free(json->string);
-        break;
-    case JSONNumber:
-        if (json->number_integer != NULL) free(json->number_integer);
-        if (json->number_fraction != NULL) free(json->number_fraction);
-        if (json->number_exponent != NULL) free(json->number_exponent);
         break;
     }
     JSON *walk = json->child;
@@ -390,30 +394,29 @@ bool parse_exponent(CBuf *buf) {
 }
 
 bool parse_number(JSON *json) {
-    // Parse integer part of number.
     cbuf_clear(&parse_buf);
+    // Parse integer part of number.
     if (next() == '-') {
         consume();
         cbuf_append(&parse_buf, '-');
     }
     if (!parse_natural0(&parse_buf)) return false;
-    json->number_integer = cbuf_print(&parse_buf);
-
     // Parse fraction part of number.
-    cbuf_clear(&parse_buf);
     if (next() == '.') {
         consume();
+        cbuf_append(&parse_buf, '.');
         if (!parse_digits(&parse_buf)) return false;
     }
-    json->number_fraction = cbuf_print(&parse_buf);
-
     // Parse fraction part of number.
-    cbuf_clear(&parse_buf);
     if (next() == 'e' || next() == 'E') {
+        cbuf_append(&parse_buf, next());
         consume();
         if (!parse_exponent(&parse_buf)) return false;
     }
-    json->number_exponent = cbuf_print(&parse_buf);
+
+    cbuf_append(&parse_buf, '\0');
+    if (sscanf(parse_buf.items, "%lg", &(json->number)) < 1)
+        return false;
 
     json->type = JSONNumber;
     return true;
@@ -579,13 +582,21 @@ void test_parser(void) {
 
 void test_JSON(void) {
     JSON *json = JSON_CreateObject();
-    JSON_ObjectAdd(json, "hello", "\"world\"");
+    JSON_ObjectAdd(json, "a", "1");
+    JSON_ObjectAdd(json, "b", "2.5");
+    JSON_ObjectAdd(json, "c", "3e2");
+    //JSON *json = JSON_CreateArray();
+    //JSON_ArrayAdd(json, "1");
+    //JSON_ArrayAdd(json, "2.5");
+    //JSON_ArrayAdd(json, "3e2");
+    //JSON_ArrayAdd(json, "4e6");
     char *str = JSON_Print(json);
-    printf("%d %s\n", json->child, str);
+    printf("%s\n", str);
     free(str);
 }
 
 int main(void) {
+    //test_parser();
     test_JSON();
     return 0;
 }

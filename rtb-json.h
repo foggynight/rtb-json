@@ -27,11 +27,7 @@ typedef struct JSON {
     union {
         bool boolval;
         char *string;
-        struct {
-            char *number_integer;
-            char *number_fraction;
-            char *number_exponent;
-        };
+        double number;
     };
 } JSON;
 
