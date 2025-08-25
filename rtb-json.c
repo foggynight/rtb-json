@@ -248,7 +248,7 @@ char *JSON_Print(JSON const * const json) {
     if (!JSON_Print_(json, &buf)) return NULL;
     char *str = malloc(buf.size * sizeof(char));
     if (!str) {
-        print_error("json_str: failed to allocate string");
+        print_error("JSON_Print: failed to allocate string");
         return NULL;
     }
     strncpy(str, buf.items, buf.size);
@@ -568,7 +568,7 @@ void test_parser(void) {
         char const *json_str = strs[i];
         JSON *json = JSON_Parse(json_str);
         if (!json) {
-            print_error("JSON_Parse: failed to parse JSON");
+            print_error("test_parser: failed to parse JSON");
         } else {
             char *str = JSON_Print(json);
             printf("TYPE = %d: ", json->type);
