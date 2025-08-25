@@ -101,28 +101,69 @@ char *cbuf_print(CBuf const *buf) {
 
 // JSON ------------------------------------------------------------------------
 
-// NOTE: Must still call `free` on caller `json` if heap allocated.
-void JSON_Delete(JSON *json) {
-    switch (json->type) {
-    case JSONString:
-        if (json->string != NULL) free(json->string);
-        break;
-    case JSONNumber:
-        if (json->number_integer != NULL) free(json->number_integer);
-        if (json->number_fraction != NULL) free(json->number_fraction);
-        if (json->number_exponent != NULL) free(json->number_exponent);
-        break;
-    }
-    JSON *walk = json->child;
-    while (walk != NULL) {
-        JSON_Delete(walk);
-        JSON *next = walk->next;
-        free(walk);
-        walk = next;
-    }
+JSON *JSON_Create(JSONType const type) {
+    JSON *json = calloc(1, sizeof(JSON));
+    if (json) json->type = type;
+    return json;
 }
 
-void JSON_AddChild(JSON *parent, JSON *child) {
+JSON *JSON_CreateNull(void) {
+    return JSON_Create(JSONNull);
+}
+
+JSON *JSON_CreateBool(bool const val) {
+    JSON *json = JSON_Create(JSONBool);
+    if (json) json->boolval = val;
+    return json;
+}
+
+JSON *JSON_CreateNumber(double const num) {
+    JSON *json = JSON_Create(JSONNumber);
+    // TODO: NUMBER VALUE
+    // if (json) json->boolval = val;
+    return json;
+}
+
+JSON *JSON_CreateString(char * const str) {
+    JSON *json = JSON_Create(JSONString);
+    if (json) json->string = str;
+    return json;
+}
+
+JSON *JSON_CreateArray(void) {
+    return JSON_Create(JSONArray);
+}
+
+JSON *JSON_CreatePair(char * const name, JSON * const value) {
+    JSON *pair = JSON_Create(JSONPair);
+    if (!pair) return NULL;
+    JSON *name_ = JSON_CreateString(name);
+    JSON_AddChild(pair, name_);
+    JSON_AddChild(pair, value);
+    return pair;
+}
+
+JSON *JSON_CreateObject(void) {
+    return JSON_Create(JSONObject);
+}
+
+JSON *JSON_ArrayAdd(JSON * const json, char const * const str) {
+    JSON *value = JSON_Parse(str);
+    if (!value) return NULL;
+    JSON_AddChild(json, value);
+    return json;
+}
+
+JSON *JSON_ObjectAdd(JSON * const json, char * const name, char const * const str) {
+    JSON *value = JSON_Parse(str);
+    if (!value) return NULL;
+    JSON *pair = JSON_CreatePair(name, value);
+    if (!pair) return NULL;
+    JSON_AddChild(json, pair);
+    return json;
+}
+
+void JSON_AddChild(JSON * const parent, JSON * const child) {
     child->parent = parent;
     if (parent->child == NULL) {
         parent->child = child;
@@ -136,7 +177,7 @@ void JSON_AddChild(JSON *parent, JSON *child) {
     }
 }
 
-bool JSON_Print_(JSON *json, CBuf *buf) {
+bool JSON_Print_(JSON const * const json, CBuf * const buf) {
     JSON *child = NULL;
     switch (json->type) {
     case JSONNull:
@@ -193,7 +234,7 @@ bool JSON_Print_(JSON *json, CBuf *buf) {
     return true;
 }
 
-char *JSON_Print(JSON *json) {
+char *JSON_Print(JSON const * const json) {
     static CBuf buf = {0};
     cbuf_clear(&buf);
     if (!JSON_Print_(json, &buf)) return NULL;
@@ -204,6 +245,27 @@ char *JSON_Print(JSON *json) {
     }
     strncpy(str, buf.items, buf.size);
     return str;
+}
+
+void JSON_Delete(JSON *json) {
+    switch (json->type) {
+    case JSONString:
+        if (json->string != NULL) free(json->string);
+        break;
+    case JSONNumber:
+        if (json->number_integer != NULL) free(json->number_integer);
+        if (json->number_fraction != NULL) free(json->number_fraction);
+        if (json->number_exponent != NULL) free(json->number_exponent);
+        break;
+    }
+    JSON *walk = json->child;
+    while (walk != NULL) {
+        JSON_Delete(walk);
+        JSON *next = walk->next;
+        free(walk);
+        walk = next;
+    }
+    free(json);
 }
 
 // parser ----------------------------------------------------------------------
@@ -471,7 +533,7 @@ fail:
     return NULL;
 }
 
-JSON *JSON_Parse(const char *str) {
+JSON *JSON_Parse(char const * const str) {
     input_str = str;
     input_len = strlen(input_str);
     input_i = 0;
@@ -483,7 +545,7 @@ JSON *JSON_Parse(const char *str) {
 
 // main (test) -----------------------------------------------------------------
 
-int main(void) {
+void test_parser(void) {
     char const *strs[] = {
         //"1",
         //"-1",
@@ -513,5 +575,17 @@ int main(void) {
             free(json);
         }
     }
+}
+
+void test_JSON(void) {
+    JSON *json = JSON_CreateObject();
+    JSON_ObjectAdd(json, "hello", "\"world\"");
+    char *str = JSON_Print(json);
+    printf("%d %s\n", json->child, str);
+    free(str);
+}
+
+int main(void) {
+    test_JSON();
     return 0;
 }
