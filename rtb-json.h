@@ -26,8 +26,8 @@ typedef struct JSON {
     struct JSON *prev, *next; // Prev and next sibling in parent's child list.
     union {
         bool boolval;
-        char *string;
         double number;
+        char *string;
     };
 } JSON;
 
