@@ -63,12 +63,12 @@ JSON *JSON_ArrayAddObject(JSON * const json, char const * const str);
 //       additionally return NULL if parsed type is not the type called for.
 JSON *JSON_ObjectAdd(JSON * const json, char * const name, JSON * const val);
 JSON *JSON_ObjectAddParse(JSON * const json, char * const name, char const * const str);
-JSON *JSON_ObjectAddNull(JSON * const json, char const * const name);
-JSON *JSON_ObjectAddBool(JSON * const json, char const * const name, bool const val);
-JSON *JSON_ObjectAddNumber(JSON * const json, char const * const name, double const num);
-JSON *JSON_ObjectAddString(JSON * const json, char const * const name, char const * const str);
-JSON *JSON_ObjectAddArray(JSON * const json, char const * const name, char const * const str);
-JSON *JSON_ObjectAddObject(JSON * const json, char const * const name, char const * const str);
+JSON *JSON_ObjectAddNull(JSON * const json, char * const name);
+JSON *JSON_ObjectAddBool(JSON * const json, char * const name, bool const val);
+JSON *JSON_ObjectAddNumber(JSON * const json, char * const name, double const num);
+JSON *JSON_ObjectAddString(JSON * const json, char * const name, char const * const str);
+JSON *JSON_ObjectAddArray(JSON * const json, char * const name, char const * const str);
+JSON *JSON_ObjectAddObject(JSON * const json, char * const name, char const * const str);
 
 // Render JSON struct as string, string must be `free`d.
 char *JSON_Print(JSON const * const json);
