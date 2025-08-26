@@ -39,22 +39,18 @@ JSON *JSON_Create(JSONType const type);
 JSON *JSON_CreateNull(void);
 JSON *JSON_CreateBool(bool const val);
 JSON *JSON_CreateNumber(double const num);
-JSON *JSON_CreateString(char * const str);
+JSON *JSON_CreateString(char const * const str);
 JSON *JSON_CreateArray(void);
-JSON *JSON_CreatePair(char * const name, JSON * const value);
+JSON *JSON_CreatePair(char * const name, JSON * const val);
 JSON *JSON_CreateObject(void);
 
-// Add child JSON struct to parent JSON struct's list of children.
-void JSON_AddChild(JSON * const parent, JSON * const child);
-
 // Add value to JSON struct of JSONType "array".
-// NOTE: `JSON_ArrayAdd` parses `str` argument using `JSON_Parse`.
-// NOTE: `JSON_ArrayAdd{String,Array,Object}` also parse `str` argument, but
+// NOTE: `JSON_ArrayAddParse` parses `str` argument using `JSON_Parse`.
+// NOTE: `JSON_ArrayAdd{Array,Object}` also parse `str` argument, but
 //       additionally return NULL if parsed type is not the type called for.
-JSON *JSON_ArrayAdd(JSON * const json, char const * const str);
+JSON *JSON_ArrayAdd(JSON * const json, JSON * const val);
+JSON *JSON_ArrayAddParse(JSON * const json, char const * const str);
 JSON *JSON_ArrayAddNull(JSON * const json);
-JSON *JSON_ArrayAddTrue(JSON * const json);
-JSON *JSON_ArrayAddFalse(JSON * const json);
 JSON *JSON_ArrayAddBool(JSON * const json, bool const val);
 JSON *JSON_ArrayAddNumber(JSON * const json, double const num);
 JSON *JSON_ArrayAddString(JSON * const json, char const * const str);
@@ -62,13 +58,12 @@ JSON *JSON_ArrayAddArray(JSON * const json, char const * const str);
 JSON *JSON_ArrayAddObject(JSON * const json, char const * const str);
 
 // Add name:value pair to JSON struct of JSONType "object".
-// NOTE: `JSON_ObjectAdd` parses `str` argument using `JSON_Parse`.
-// NOTE: `JSON_ObjectAdd{String,Array,Object}` also parse `str` argument, but
+// NOTE: `JSON_ObjectAddParse` parses `str` argument using `JSON_Parse`.
+// NOTE: `JSON_ObjectAdd{Array,Object}` also parse `str` argument, but
 //       additionally return NULL if parsed type is not the type called for.
-JSON *JSON_ObjectAdd(JSON * const json, char * const name, char const * const str);
+JSON *JSON_ObjectAdd(JSON * const json, char * const name, JSON * const val);
+JSON *JSON_ObjectAddParse(JSON * const json, char * const name, char const * const str);
 JSON *JSON_ObjectAddNull(JSON * const json, char const * const name);
-JSON *JSON_ObjectAddTrue(JSON * const json, char const * const name);
-JSON *JSON_ObjectAddFalse(JSON * const json, char const * const name);
 JSON *JSON_ObjectAddBool(JSON * const json, char const * const name, bool const val);
 JSON *JSON_ObjectAddNumber(JSON * const json, char const * const name, double const num);
 JSON *JSON_ObjectAddString(JSON * const json, char const * const name, char const * const str);

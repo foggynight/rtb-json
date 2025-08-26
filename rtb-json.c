@@ -2,6 +2,8 @@
 // Copyright (C) 2025 Robert Coffey
 // Released under the MIT license.
 
+// TODO: Make private functions static.
+
 #include "rtb-json.h"
 
 #include <stdbool.h>
@@ -132,9 +134,13 @@ JSON *JSON_CreateNumber(double const num) {
     return json;
 }
 
-JSON *JSON_CreateString(char * const str) {
+JSON *JSON_CreateString(char const * const str) {
+    size_t str_len = strlen(str);
+    char *json_str = malloc((str_len + 1) * sizeof(*str));
+    if (!json_str) return NULL;
+    strncpy(json_str, str, str_len + 1);
     JSON *json = JSON_Create(JSONString);
-    if (json) json->string = str;
+    if (json) json->string = json_str;
     return json;
 }
 
@@ -142,36 +148,7 @@ JSON *JSON_CreateArray(void) {
     return JSON_Create(JSONArray);
 }
 
-JSON *JSON_CreatePair(char * const name, JSON * const value) {
-    JSON *pair = JSON_Create(JSONPair);
-    if (!pair) return NULL;
-    JSON *name_ = JSON_CreateString(name);
-    JSON_AddChild(pair, name_);
-    JSON_AddChild(pair, value);
-    return pair;
-}
-
-JSON *JSON_CreateObject(void) {
-    return JSON_Create(JSONObject);
-}
-
-JSON *JSON_ArrayAdd(JSON * const json, char const * const str) {
-    JSON *value = JSON_Parse(str);
-    if (!value) return NULL;
-    JSON_AddChild(json, value);
-    return json;
-}
-
-JSON *JSON_ObjectAdd(JSON * const json, char * const name, char const * const str) {
-    JSON *value = JSON_Parse(str);
-    if (!value) return NULL;
-    JSON *pair = JSON_CreatePair(name, value);
-    if (!pair) return NULL;
-    JSON_AddChild(json, pair);
-    return json;
-}
-
-void JSON_AddChild(JSON * const parent, JSON * const child) {
+static void JSON_AddChild(JSON * const parent, JSON * const child) {
     child->parent = parent;
     if (parent->child == NULL) {
         parent->child = child;
@@ -185,7 +162,93 @@ void JSON_AddChild(JSON * const parent, JSON * const child) {
     }
 }
 
-bool JSON_Print_(JSON const * const json, CBuf * const buf) {
+JSON *JSON_CreatePair(char * const name, JSON * const val) {
+    JSON *pair = JSON_Create(JSONPair);
+    if (!pair) return NULL;
+    JSON *name_ = JSON_CreateString(name);
+    JSON_AddChild(pair, name_);
+    JSON_AddChild(pair, val);
+    return pair;
+}
+
+JSON *JSON_CreateObject(void) {
+    return JSON_Create(JSONObject);
+}
+
+JSON *JSON_ArrayAdd(JSON * const json, JSON * const val) {
+    JSON_AddChild(json, val);
+    return json;
+}
+
+JSON *JSON_ArrayAddParse(JSON * const json, char const * const str) {
+    JSON *val = JSON_Parse(str);
+    if (!val) return NULL;
+    JSON_AddChild(json, val);
+    return json;
+}
+
+JSON *JSON_ArrayAddNull(JSON * const json) {
+    JSON *json_null = JSON_CreateNull();
+    if (!json_null) return NULL;
+    JSON_AddChild(json, json_null);
+    return json;
+}
+
+JSON *JSON_ArrayAddBool(JSON * const json, bool const val) {
+    JSON *json_bool = JSON_CreateBool(val);
+    if (!json_bool) return NULL;
+    JSON_AddChild(json, json_bool);
+    return json;
+}
+
+JSON *JSON_ArrayAddNumber(JSON * const json, double const num) {
+    JSON *json_number = JSON_CreateNumber(num);
+    if (!json_number) return NULL;
+    JSON_AddChild(json, json_number);
+    return json;
+}
+
+JSON *JSON_ArrayAddString(JSON * const json, char const * const str) {
+    JSON *json_str = JSON_CreateString(str);
+    if (!json_str) return NULL;
+    JSON_AddChild(json, json_str);
+    return json;
+}
+
+JSON *JSON_ArrayAddArray(JSON * const json, char const * const str) {
+    JSON *json_parsed = JSON_Parse(str);
+    if (!json_parsed || json_parsed->type != JSONArray)
+        return false;
+    JSON_AddChild(json, json_parsed);
+    return json;
+}
+
+JSON *JSON_ArrayAddObject(JSON * const json, char const * const str) {
+    JSON *json_parsed = JSON_Parse(str);
+    if (!json_parsed || json_parsed->type != JSONObject)
+        return false;
+    JSON_AddChild(json, json_parsed);
+    return json;
+}
+
+JSON *JSON_ObjectAdd(JSON * const json, char * const name, JSON * const val) {
+    JSON *pair = JSON_CreatePair(name, val);
+    if (!pair) return NULL;
+    JSON_AddChild(json, pair);
+    return json;
+}
+
+JSON *JSON_ObjectAddParse(JSON * const json,
+        char * const name, char const * const str)
+{
+    JSON *val = JSON_Parse(str);
+    if (!val) return NULL;
+    return JSON_ObjectAdd(json, name, val);
+}
+
+// TODO: Add ..ObjectAdd.. function definitions.
+
+static bool JSON_Print_(JSON const * const json, CBuf * const buf) {
     JSON *child = NULL;
     switch (json->type) {
     case JSONNull:
@@ -581,15 +644,16 @@ void test_parser(void) {
 }
 
 void test_JSON(void) {
-    JSON *json = JSON_CreateObject();
-    JSON_ObjectAdd(json, "a", "1");
-    JSON_ObjectAdd(json, "b", "2.5");
-    JSON_ObjectAdd(json, "c", "3e2");
-    //JSON *json = JSON_CreateArray();
-    //JSON_ArrayAdd(json, "1");
-    //JSON_ArrayAdd(json, "2.5");
-    //JSON_ArrayAdd(json, "3e2");
-    //JSON_ArrayAdd(json, "4e6");
+    //JSON *json = JSON_CreateObject();
+    //JSON_ObjectAddParse(json, "a", "1");
+    //JSON_ObjectAddParse(json, "b", "2.5");
+    //JSON_ObjectAddParse(json, "c", "3e2");
+    JSON *json = JSON_CreateArray();
+    JSON_ArrayAddParse(json, "1");
+    JSON_ArrayAddParse(json, "2.5");
+    JSON_ArrayAddParse(json, "3e2");
+    JSON_ArrayAddParse(json, "4e6");
+    JSON_ArrayAddArray(json, "[1,2,3]");
     char *str = JSON_Print(json);
     printf("%s\n", str);
     free(str);
