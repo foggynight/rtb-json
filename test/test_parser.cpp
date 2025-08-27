@@ -1,11 +1,11 @@
 //------------------------------------------------------------------------------
 // --- USAGE ---
-// run_test MODE ...
+// test_parser MODE ...
 //
-// run_test input INPUT
+// test_parser input INPUT
 //   Execute JSON parsing function on INPUT string, print result.
 //
-// run_test cases [FILE...]
+// test_parser cases [FILE...]
 //   Execute JSON parsing function on the contents of each FILE and print
 //   results. Desired case result is determined by filename prefix.
 //     y -> success

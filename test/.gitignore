@@ -1,2 +1,2 @@
-debug
-run_test
+test_JSON
+test_parser

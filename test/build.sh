@@ -1,3 +1,4 @@
 #!/bin/sh
 
-g++ -o run_test -std=c++20 run_test.cpp ../rtb-json.c
+gcc -o test_JSON -g test_JSON.c ../rtb-json.c
+g++ -o test_parser -g -std=c++20 test_parser.cpp ../rtb-json.c
