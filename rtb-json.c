@@ -56,7 +56,7 @@ int cbuf_remaining(CBuf const * buf) {
 
 bool cbuf_reserve(CBuf *buf, size_t capacity) {
     buf->capacity = capacity;
-    char *items = realloc(buf->items, capacity * sizeof(*(buf->items)));
+    char *items = (char*)realloc(buf->items, capacity * sizeof(*(buf->items)));
     if (!items) {
         print_error("cbuf_reserve: reallocation failed");
         return false;
@@ -67,7 +67,7 @@ bool cbuf_reserve(CBuf *buf, size_t capacity) {
 
 bool cbuf_grow(CBuf *buf) {
     buf->capacity = (buf->capacity == 0) ? 64 : buf->capacity * 2;
-    buf->items = realloc(buf->items, buf->capacity * sizeof(*(buf->items)));
+    buf->items = (char*)realloc(buf->items, buf->capacity * sizeof(*(buf->items)));
     if (!buf->items) {
         print_error("cbuf_grow: reallocation failed");
         return false;
@@ -93,7 +93,7 @@ bool cbuf_append_str(CBuf *buf, char const *str) {
 }
 
 char *cbuf_print(CBuf const *buf) {
-    char *str = malloc(buf->size + 1);
+    char *str = (char*)malloc(buf->size + 1);
     if (!str) {
         print_error("cbuf_print: allocation failed");
         return NULL;
@@ -113,7 +113,7 @@ void cbuf_delete(CBuf *buf) {
 // JSON ------------------------------------------------------------------------
 
 JSON *JSON_Create(JSONType const type) {
-    JSON *json = calloc(1, sizeof(JSON));
+    JSON *json = (JSON*)calloc(1, sizeof(JSON));
     if (json) json->type = type;
     return json;
 }
@@ -136,7 +136,7 @@ JSON *JSON_CreateNumber(double const num) {
 
 JSON *JSON_CreateString(char const * const str) {
     size_t str_len = strlen(str);
-    char *json_str = malloc((str_len + 1) * sizeof(*str));
+    char *json_str = (char*)malloc((str_len + 1) * sizeof(*str));
     if (!json_str) return NULL;
     strncpy(json_str, str, str_len + 1);
     JSON *json = JSON_Create(JSONString);
@@ -218,7 +218,7 @@ JSON *JSON_ArrayAddString(JSON * const json, char const * const str) {
 JSON *JSON_ArrayAddArray(JSON * const json, char const * const str) {
     JSON *json_parsed = JSON_Parse(str);
     if (!json_parsed || json_parsed->type != JSONArray)
-        return false;
+        return NULL;
     JSON_AddChild(json, json_parsed);
     return json;
 }
@@ -226,7 +226,7 @@ JSON *JSON_ArrayAddArray(JSON * const json, char const * const str) {
 JSON *JSON_ArrayAddObject(JSON * const json, char const * const str) {
     JSON *json_parsed = JSON_Parse(str);
     if (!json_parsed || json_parsed->type != JSONObject)
-        return false;
+        return NULL;
     JSON_AddChild(json, json_parsed);
     return json;
 }
@@ -296,7 +296,7 @@ static bool JSON_Print_(JSON const * const json, CBuf * const buf) {
         if (!cbuf_append_str(buf, json->boolval ? "true" : "false"))
             return false;
         break;
-    case JSONNumber:
+    case JSONNumber: {
         char const *fmt = "%lg";
         int number_len = snprintf(NULL, 0, fmt, json->number);
         if (number_len < 0) return false;
@@ -306,7 +306,7 @@ static bool JSON_Print_(JSON const * const json, CBuf * const buf) {
                 < 1)
             return false;
         buf->size += number_len;
-        break;
+        } break;
     case JSONString:
         cbuf_append(buf, '"');
         cbuf_append_str(buf, json->string);
@@ -347,7 +347,7 @@ char *JSON_Print(JSON const * const json) {
     static CBuf buf = {0};
     cbuf_clear(&buf);
     if (!JSON_Print_(json, &buf)) return NULL;
-    char *str = malloc(buf.size * sizeof(char));
+    char *str = (char*)malloc(buf.size * sizeof(char));
     if (!str) {
         print_error("JSON_Print: failed to allocate string");
         return NULL;
@@ -561,12 +561,12 @@ done:
 }
 
 JSON *parse_pair(void) {
-    JSON *pair = calloc(1, sizeof(JSON));
+    JSON *pair = (JSON*)calloc(1, sizeof(JSON));
     if (!pair) {
         print_error("parse_pair: failed to allocate JSON");
         return NULL;
     }
-    JSON *key = calloc(1, sizeof(JSON));
+    JSON *key = (JSON*)calloc(1, sizeof(JSON));
     if (!key) {
         print_error("parse_pair: failed to allocate JSON");
         return NULL;
@@ -608,7 +608,7 @@ done:
 }
 
 JSON *parse_value(void) {
-    JSON *json = calloc(1, sizeof(JSON));
+    JSON *json = (JSON*)calloc(1, sizeof(JSON));
     if (!json) {
         print_error("parse_value: failed to allocate JSON");
         return NULL;
@@ -645,61 +645,4 @@ JSON *JSON_Parse(char const * const str) {
     cbuf_delete(&parse_buf);
     if (!json || !expect('\0')) return NULL;
     return json;
-}
-
-// main (test) -----------------------------------------------------------------
-
-void test_parser(void) {
-    char const *strs[] = {
-        //"1",
-        //"-1",
-        //"1.2e5",
-        //"-1.2e+5",
-        //"\"this is a test\"",
-        //"{\"a\": 1, \"b\": 2}",
-        //"null",
-        //"true",
-        //"false",
-        //"[null, true, false]",
-        //"[null, true, false, 0, -1.0e2, \"test\"]",
-        "{\"a\": null, \"b\": 0, \"c\": [1,-2.0e0,3.0]}",
-    };
-    size_t len = sizeof(strs) / sizeof(*strs);
-    for (size_t i = 0; i < len; ++i) {
-        char const *json_str = strs[i];
-        JSON *json = JSON_Parse(json_str);
-        if (!json) {
-            print_error("test_parser: failed to parse JSON");
-        } else {
-            char *str = JSON_Print(json);
-            printf("TYPE = %d: ", json->type);
-            printf("%s -> %s\n", json_str, str);
-            free(str);
-            JSON_Delete(json);
-            free(json);
-        }
-    }
-}
-
-void test_JSON(void) {
-    JSON *json = JSON_CreateObject();
-    JSON_ObjectAddNumber(json, "a", 1.0);
-    JSON_ObjectAddParse(json, "a2", "1.0");
-    JSON_ObjectAddParse(json, "b", "2.5");
-    JSON_ObjectAddParse(json, "c", "3e2");
-    //JSON *json = JSON_CreateArray();
-    //JSON_ArrayAddParse(json, "1");
-    //JSON_ArrayAddParse(json, "2.5");
-    //JSON_ArrayAddParse(json, "3e2");
-    //JSON_ArrayAddParse(json, "4e6");
-    //JSON_ArrayAddArray(json, "[1,2,3]");
-    char *str = JSON_Print(json);
-    printf("%s\n", str);
-    free(str);
-}
-
-int main(void) {
-    //test_parser();
-    test_JSON();
-    return 0;
 }
