@@ -79,7 +79,6 @@ bool cbuf_append(CBuf *buf, char c) {
     if (buf->size+1 >= buf->capacity)
         cbuf_grow(buf);
     buf->items[buf->size++] = c;
-    buf->items[buf->size] = '\0';
     return true;
 }
 
@@ -95,7 +94,7 @@ bool cbuf_append_str(CBuf *buf, char const *str) {
 char *cbuf_print(CBuf const *buf) {
     char *str = (char*)malloc(buf->size + 1);
     if (!str) {
-        print_error("cbuf_print: allocation failed");
+        print_error("cbuf_print: failed to allocate string to store buffer");
         return NULL;
     }
     strncpy(str, buf->items, buf->size);
@@ -344,15 +343,9 @@ static bool JSON_Print_(JSON const * const json, CBuf * const buf) {
 }
 
 char *JSON_Print(JSON const * const json) {
-    static CBuf buf = {0};
-    cbuf_clear(&buf);
+    CBuf buf = {0};
     if (!JSON_Print_(json, &buf)) return NULL;
-    char *str = (char*)malloc(buf.size * sizeof(char));
-    if (!str) {
-        print_error("JSON_Print: failed to allocate string");
-        return NULL;
-    }
-    strncpy(str, buf.items, buf.size);
+    char *str = cbuf_print(&buf);
     cbuf_delete(&buf);
     return str;
 }

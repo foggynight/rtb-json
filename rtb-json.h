@@ -9,7 +9,6 @@ extern "C" {
 #include <stdbool.h>
 
 typedef enum {
-    JSONInvalid,
     JSONNull,
     JSONBool,
     JSONNumber,
@@ -35,6 +34,7 @@ typedef struct JSON {
 JSON *JSON_Parse(char const * const str);
 
 // Construct a JSON struct of a given type manually; must be `JSON_Delete`d.
+// JSON_CreateString creates a copy of the string argument.
 JSON *JSON_Create(JSONType const type);
 JSON *JSON_CreateNull(void);
 JSON *JSON_CreateBool(bool const val);
