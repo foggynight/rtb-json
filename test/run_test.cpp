@@ -60,6 +60,7 @@ void test_cases(int argc, char **argv) {
         if      (targ == 0)                pass = true;
         else if (targ > 0 && json != NULL) pass = true;
         else if (targ < 0 && json == NULL) pass = true;
+        if (json) JSON_Delete(json);
 
         std::cout << "case: " << filename << ' '
             << (pass ? "PASS" : "FAIL") << std::endl;

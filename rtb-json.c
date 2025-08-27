@@ -366,9 +366,7 @@ void JSON_Delete(JSON *json) {
     JSON *walk = json->child;
     while (walk != NULL) {
         JSON_Delete(walk);
-        JSON *next = walk->next;
-        free(walk);
-        walk = next;
+        walk = walk->next;
     }
     free(json);
 }
